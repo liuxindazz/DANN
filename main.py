@@ -1,3 +1,4 @@
+from __future__ import print_function
 import random
 import os
 import torch.backends.cudnn as cudnn
@@ -10,7 +11,9 @@ from torchvision import transforms
 from models.model import CNNModel
 import numpy as np
 from test import test
+import visdom
 
+vis = visdom.Visdom(env='dann_mnist')
 source_dataset_name = 'mnist'
 target_dataset_name = 'mnist_m'
 source_image_root = os.path.join('dataset', source_dataset_name)
@@ -96,9 +99,12 @@ for epoch in xrange(n_epoch):
         alpha = 2. / (1. + np.exp(-10 * p)) - 1
 
         # training model using source data
-        data_source = data_source_iter.next()
-        s_img, s_label = data_source
-
+        try:
+            data_source = data_source_iter.next()
+            s_img, s_label = data_source
+        except StopIteration:
+            data_source_iter = iter(dataloader_source)
+            s_img, s_label = data_source_iter.next()
         my_net.zero_grad()
         batch_size = len(s_label)
 
@@ -151,12 +157,23 @@ for epoch in xrange(n_epoch):
 
         i += 1
 
-        print 'epoch: %d, [iter: %d / all %d], err_s_label: %f, err_s_domain: %f, err_t_domain: %f' \
+        print('epoch: %d, [iter: %d / all %d], err_s_label: %f, err_s_domain: %f, err_t_domain: %f' \
               % (epoch, i, len_dataloader, err_s_label.cpu().data.numpy(),
-                 err_s_domain.cpu().data.numpy(), err_t_domain.cpu().data.numpy())
-
+                 err_s_domain.cpu().data.numpy(), err_t_domain.cpu().data.numpy()))
+        vis.line(X=torch.FloatTensor([epoch*len_dataloader+i+1]), 
+                 Y=torch.FloatTensor([err_s_label]), 
+                 win='err_s_label', 
+                 update='append' if i> 0 else None)
+        vis.line(X=torch.FloatTensor([epoch*len_dataloader+i+1]), 
+                 Y=torch.FloatTensor([err_s_domain]), 
+                 win='err_s_domain', 
+                 update='append' if i> 0 else None)
+        vis.line(X=torch.FloatTensor([epoch*len_dataloader+i+1]), 
+                 Y=torch.FloatTensor([err_t_domain]), 
+                 win='err_t_domain',
+                 update='append' if i> 0 else None)         
     torch.save(my_net, '{0}/mnist_mnistm_model_epoch_{1}.pth'.format(model_root, epoch))
     test(source_dataset_name, epoch)
     test(target_dataset_name, epoch)
 
-print 'done'
+print('done')

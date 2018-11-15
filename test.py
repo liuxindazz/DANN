@@ -1,12 +1,15 @@
+from __future__ import print_function
 import os
 import torch.backends.cudnn as cudnn
 import torch.utils.data
+import torch
 from torch.autograd import Variable
 from torchvision import transforms
 from dataset.data_loader import GetLoader
 from torchvision import datasets
+import visdom
 
-
+vis = visdom.Visdom(env='dann_mnist')
 def test(dataset_name, epoch):
     assert dataset_name in ['mnist', 'mnist_m']
 
@@ -90,11 +93,18 @@ def test(dataset_name, epoch):
 
         class_output, _ = my_net(input_data=inputv_img, alpha=alpha)
         pred = class_output.data.max(1, keepdim=True)[1]
-        n_correct += pred.eq(classv_label.data.view_as(pred)).cpu().sum()
+        tmp = pred.eq(classv_label.data.view_as(pred)).cpu()
+        k = torch.sum(tmp).item()
+        n_correct += k
         n_total += batch_size
 
         i += 1
 
     accu = n_correct * 1.0 / n_total
 
-    print 'epoch: %d, accuracy of the %s dataset: %f' % (epoch, dataset_name, accu)
+    print('epoch: %d, accuracy of the %s dataset: %f' % (epoch, dataset_name, accu))
+    vis.line(X=torch.FloatTensor([epoch*len_dataloader+i+1]), 
+                 Y=torch.FloatTensor([accu]), 
+                 win=dataset_name, 
+                 name=dataset_name,
+                 update='append' if i> 0 else None) 
